@@ -1,5 +1,7 @@
 from flask import Flask, request, jsonify
 from youtube_transcript_api import YouTubeTranscriptApi
+from youtube_transcript_api.exceptions import YouTubeTranscriptApiException
+import time
 
 app = Flask(__name__)
 
@@ -9,13 +11,12 @@ def get_transcript():
         return jsonify(error="No video ID provided"), 400
 
     video_id = request.form['video_id']
-
+    
     try:
-        # Fetch the transcript with timestamps using youtube-transcript-api
+        # Fetch the transcript with timestamps
         transcript = YouTubeTranscriptApi.get_transcript(video_id)
         formatted_transcript = []
 
-        # Format the transcript with timestamps
         for entry in transcript:
             formatted_entry = {
                 "start_time": entry['start'],
@@ -25,6 +26,15 @@ def get_transcript():
             formatted_transcript.append(formatted_entry)
 
         return jsonify(transcript=formatted_transcript), 200
+
+    except YouTubeTranscriptApiException as e:
+        error_message = str(e)
+        if "Too Many Requests" in error_message:
+            # Retry after delay if rate limit error
+            time.sleep(60)  # Wait 60 seconds before retrying
+            return jsonify(error="Rate limit exceeded. Please try again later."), 429
+        else:
+            return jsonify(error=error_message), 500
 
     except Exception as e:
         return jsonify(error=str(e)), 500
